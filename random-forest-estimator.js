@@ -8,8 +8,8 @@ export class RandomForestEstimator {
     #trainingPromise;
 
     constructor (trainingPath, modelPath, options = {
-        maxFeatures: 1.0,
-        nEstimators: 200,
+        maxFeatures: 0.8,
+        nEstimators: 100,
         replacement: false,
         seed: 42
     }) {

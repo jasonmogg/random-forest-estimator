@@ -97,8 +97,8 @@ if (inputPath) {
             data.forEach((features, i) => {
                 console.log(`Record ${i + 1}:`);
                 console.log(`  Features: ${features.join(', ')}`);
-                console.log(`  Predicted: $${Math.round(predictions[i]).toLocaleString()}`);
-                console.log(`  Actual: $${Math.round(actuals[i]).toLocaleString()}`);
+                console.log(`  Predicted: ${Math.round(predictions[i]).toLocaleString()}`);
+                console.log(`  Actual: ${Math.round(actuals[i]).toLocaleString()}`);
                 console.log(`  Difference: ${(metrics.diffs[i] * 100).toFixed(2)}%`);
             });
 

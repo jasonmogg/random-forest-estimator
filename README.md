@@ -20,7 +20,7 @@ npm install
 Run the program with the following command:
 
 ```bash
-node index.js <class_module_path> <training_csv> [model_path] <input_csv>
+node index.js <class_module_path> <training_csv> [model_path] [input_csv]
 ```
 
 Where:

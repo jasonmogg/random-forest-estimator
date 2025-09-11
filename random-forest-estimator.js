@@ -8,37 +8,31 @@ export class RandomForestEstimator {
     #trainingPromise;
 
     constructor (trainingPath, modelPath, options = {
-        maxFeatures: 1.0,
-        nEstimators: 200,
+        maxFeatures: 0.8,
+        nEstimators: 100,
         replacement: false,
         seed: 42
     }) {
-        if (modelPath && fs.existsSync(modelPath)) {
-            console.log('Loading model from', modelPath);
+        this.#trainingPromise = this.#load(trainingPath).then(async ({ actuals, data, fields, labels, rows }) => {
+            if (modelPath && fs.existsSync(modelPath)) {
+                console.log('Loading model from', modelPath);
 
-            this.#trainingPromise = new Promise(async resolve => {
                 this.#regression = RandomForestRegression.load(JSON.parse(await fs.promises.readFile(modelPath)));
-
-                resolve(this.#regression);
-            });
-        } else {
-            console.log('Training model from', trainingPath);
-
-            this.#trainingPromise = this.#load(trainingPath).then(({ actuals, data, rows }) => {
-                const fields = rows[0];
+            } else {
+                console.log('Training model from', trainingPath);
 
                 this.#regression = new RandomForestRegression(options);
                 this.#regression.train(data, actuals);
 
                 if (modelPath) {
                     fs.writeFileSync(modelPath, JSON.stringify(this.#regression.toJSON()));
-
+    
                     console.log('Model saved to', modelPath);
                 }
+            }
 
-                return this.#regression;
-            });
-        }
+            return { actuals, data, fields, importance: this.fieldImportance, labels, rows };
+        });
     }
 
     // public properties
@@ -55,12 +49,22 @@ export class RandomForestEstimator {
         throw new Error('Not implemented');
     }
 
+    get fieldImportance () {
+        const featureImportance = this.#regression.featureImportance();
+
+        return Object.fromEntries(this.features.map((feature, index) => [feature, featureImportance[index]]));
+    }
+
     get labelField () {
         throw new Error('Not implemented');
     }
 
     get predictionField () {
         throw new Error('Not implemented');
+    }
+
+    get trainingPromise () {
+        return this.#trainingPromise;
     }
 
     // methods
@@ -76,8 +80,6 @@ export class RandomForestEstimator {
         }
 
         let diffs, mae, mse, rmse, r2;
-
-        const importance = Object.fromEntries(this.features.map((feature, index) => [feature, this.#regression.featureImportance()[index]]));
 
         if (actuals) {
             diffs = predictions.map((pred, i) => (pred / actuals[i]) - 1);
@@ -102,7 +104,16 @@ export class RandomForestEstimator {
             r2 = 1 - (residualVariance / totalVariance);
         }
         
-        return { diffs, importance, mae, mse, rmse, r2 };
+        return { diffs, importance: this.fieldImportance, mae, mse, rmse, r2 };
+    }
+
+    // OR array of AND object filters
+    get dataFilters () {
+        return undefined;
+    }
+
+    getPredictionValue ({ fields, row, predictionIndex }) {
+        return Number(row[predictionIndex]);
     }
 
     #load (path) {
@@ -113,10 +124,25 @@ export class RandomForestEstimator {
             const data = [];
             const labelIndex = fields.indexOf(this.labelField);
             const labels = [];
+            const orFilters = this.dataFilters;
             const predictionIndex = fields.indexOf(this.predictionField);
             
             dataRows.forEach(row => {
-                const actual = Number(row[predictionIndex]);
+                if (orFilters) {
+                    const passesDataFilters = orFilters.some(andFilter => {
+                        return Object.keys(andFilter).every(key => {
+                            const keyIndex = fields.indexOf(key);
+
+                            return row[keyIndex] === andFilter[key];
+                        });
+                    });
+
+                    if (!passesDataFilters) {
+                        return;
+                    }
+                }
+
+                const actual = this.getPredictionValue({ fields, row, predictionIndex });
 
                 if (!this.actualFilter(actual)) {
                     return;

@@ -4,50 +4,76 @@
 // Run: npm install axios csvtojson csv-stringify
 
 import axios from 'axios';
-import fs from 'fs';
 import csv from 'csvtojson';
+import fs from 'fs';
 import { stringify } from 'csv-stringify/sync';
 
 const BASE_URL = 'https://github.com/nflverse/nflverse-data/releases/download/stats_team';
+const GAME_RESULTS_URL = 'https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv';
 
-const gameResultsFile = process.argv[2];
-const outputFile = process.argv[3] || 'all_stats_team_week.csv';
-
-if (!gameResultsFile) {
-  console.error('Usage: node download-combine-team-week-stats.js <gameResultsCsv> [outputFile]');
-  process.exit(1);
-}
+const outputFile = process.argv[2] || 'all_stats_team_week.csv';
 
 const startYear = 1999;
 const endYear = new Date().getFullYear();
 
-async function downloadCsv(year) {
+async function downloadCsv (year) {
   const url = `${BASE_URL}/stats_team_week_${year}.csv`;
+
   try {
     const response = await axios.get(url, { responseType: 'stream' });
+
     return response.data;
   } catch (e) {
     console.error(`Failed to download for year ${year}: ${e.message}`);
+
     return null;
   }
 }
 
-async function main() {
+async function downloadGameResults () {
+  try {
+    const response = await axios.get(GAME_RESULTS_URL, { responseType: 'stream' });
+
+    return response.data;
+  } catch (e) {
+    console.error(`Failed to download game results`);
+
+    return null;
+  }
+}
+
+async function main () {
   // Load game results CSV
-  console.log(`Loading game results from ${gameResultsFile}...`);
-  const gameResults = await csv().fromFile(gameResultsFile);
-  console.log(`Loaded ${gameResults.length} game results`);
+  console.log(`Downloading game results from ${GAME_RESULTS_URL}...`);
+  const gameResultsStream = await downloadGameResults();
+  console.log(`Loaded game results`);
+
+  let gameResults;
+  
+  try {
+    // Parse CSV properly using csvtojson
+    gameResults = await csv().fromStream(gameResultsStream);
+
+    console.log(`Parsed ${gameResults.length} rows for game results`);
+  } catch (e) {
+    console.error(`Error parsing game results: ${e.message}`);
+
+    process.exit(1);
+  }
   
   // Create lookup map for game results (key: season_week_team)
   const gameResultsMap = new Map();
+
   for (const game of gameResults) {
     const awayKey = `${game.season}_${game.week}_${game.away_team}`;
     const homeKey = `${game.season}_${game.week}_${game.home_team}`;
+
     gameResultsMap.set(awayKey, {
       away_score: game.away_score,
       home_score: game.home_score,
       result: game.result
     });
+
     gameResultsMap.set(homeKey, {
       away_score: game.away_score,
       home_score: game.home_score,
@@ -55,13 +81,16 @@ async function main() {
     });
   }
   
-  let allRows = [];
+  let allRows = gameResults.slice(0);
   
   for (let year = startYear; year <= endYear; year++) {
     console.log(`Downloading stats_team_week_${year}.csv ...`);
+
     const stream = await downloadCsv(year);
+
     if (!stream) {
       console.error(`Failed to download for year ${year}`);
+
       continue;
     }
     
@@ -74,6 +103,7 @@ async function main() {
       for (const row of rows) {
         const key = `${row.season}_${row.week}_${row.team}`;
         const gameData = gameResultsMap.get(key);
+
         if (gameData) {
           row.away_score = gameData.away_score;
           row.home_score = gameData.home_score;
@@ -86,16 +116,18 @@ async function main() {
       }
       
       if (rows.length > 0) {
-        allRows = allRows.concat(rows);
+        allRows.push(...rows);
       }
     } catch (e) {
       console.error(`Error parsing CSV for year ${year}: ${e.message}`);
+
       continue;
     }
   }
   
   if (allRows.length === 0) {
     console.log('No data to write');
+
     return;
   }
   

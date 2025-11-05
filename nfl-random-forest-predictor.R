@@ -11,7 +11,7 @@ schedules <- load_schedules()
 allGames <- merge(schedules, teamStats, by.x = c('season', 'week', 'home_team', 'away_team'), by.y = c('season', 'week', 'team', 'opponent_team'), all.x=TRUE)
 pastGames <- allGames[!is.na(allGames$season_type),]
 upcomingGames <- allGames[is.na(allGames$season_type),]
-upcomingGamesReady <- upcomingGames[!is.na(upcomingGames$away_qb_name),]
+upcomingGamesReady <- upcomingGames[!is.na(upcomingGames$spread_line) & !is.na(upcomingGames$away_qb_name),]
 
 xColumns <- c('season','game_type','week','gameday','weekday','away_team','home_team','location','away_rest','home_rest','spread_line','total_line','div_game','roof','away_qb_name','home_qb_name','away_coach','home_coach','stadium_id','stadium')
 pastGamesPredictors <- pastGames[,..xColumns]
